@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import PyPDF2
+import os
 
 class PDFExtractor:
     def __init__(self, root):
@@ -15,6 +16,9 @@ class PDFExtractor:
         self.input_label = tk.Label(root, text="No file selected")
         self.input_label.grid(row=0, column=1, padx=5, pady=5)
         tk.Button(root, text="Select", command=self.select_input).grid(row=0, column=2, padx=5, pady=5)
+        # Add label to show valid page range after input is selected
+        self.page_range_label = tk.Label(root, text="", fg="blue")
+        self.page_range_label.grid(row=0, column=3, padx=5, pady=5, sticky="w")
 
         tk.Label(root, text="Page selection:").grid(row=1, column=0, padx=5, pady=5)
         tk.Entry(root, textvariable=self.page_selection).grid(row=1, column=1, columnspan=2, padx=5, pady=5)
@@ -35,15 +39,26 @@ class PDFExtractor:
         """Open a dialog to select the input PDF file."""
         self.input_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
         if self.input_path:
-            self.input_label.config(text=self.input_path)
+            # Show only the file name, not the full path
+            self.input_label.config(text=os.path.basename(self.input_path))
+            # Show valid page range
+            try:
+                with open(self.input_path, 'rb') as f:
+                    reader = PyPDF2.PdfReader(f)
+                    total_pages = len(reader.pages)
+                self.page_range_label.config(text=f"Pages: 1 - {total_pages}")
+            except Exception as e:
+                self.page_range_label.config(text="Error reading PDF")
         else:
             self.input_label.config(text="No file selected")
+            self.page_range_label.config(text="")
 
     def select_output(self):
         """Open a dialog to specify the output PDF file."""
         self.output_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")])
         if self.output_path:
-            self.output_label.config(text=self.output_path)
+            # Show only the file name, not the full path
+            self.output_label.config(text=os.path.basename(self.output_path))
         else:
             self.output_label.config(text="No file selected")
 
@@ -74,9 +89,9 @@ class PDFExtractor:
                 # Save the new PDF
                 with open(self.output_path, 'wb') as out_f:
                     writer.write(out_f)
-            self.status_label.config(text="Done!")
+            self.status_label.config(text="Done!", fg="green")
         except Exception as e:
-            self.status_label.config(text=f"Error: {str(e)}")
+            self.status_label.config(text=f"Error: {str(e)}", fg="red")
 
     def parse_page_selection(self, selection_str, total_pages):
         """

@@ -33,6 +33,8 @@ PDF Slicer is a simple tool for extracting specific pages from a PDF file and sa
 - Use commas to separate pages or ranges: `1, 3-5, 7`
 - Ranges are inclusive (e.g., `3-5` extracts pages 3, 4, and 5).
 - Pages are 1-based (the first page is 1).
+- The order of pages in the output PDF will match the order specified in the input.
+- Repeated pages are allowed (e.g., `1, 1, 2` will include page 1 twice).
 
 ## License
 This project is provided as-is for personal use.
