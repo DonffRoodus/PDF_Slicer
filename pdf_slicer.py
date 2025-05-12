@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import filedialog
 import PyPDF2
 import os
+from pdf2image import convert_from_path
+from PIL import ImageTk, Image
 
 
 class PDFExtractor:
@@ -29,18 +31,22 @@ class PDFExtractor:
         )
         # Add instruction label for page selection format
         tk.Label(root, text="Format: 1, 3-5, 7 (pages start from 1)", fg="gray").grid(
-            row=1, column=3, padx=5, pady=5, sticky="w"
+            row=2, column=1, padx=5, pady=5, sticky="w"
         )
 
-        tk.Label(root, text="Output PDF:").grid(row=2, column=0, padx=5, pady=5)
+        tk.Label(root, text="Output PDF:").grid(row=3, column=0, padx=5, pady=5)
         self.output_label = tk.Label(root, text="No file selected")
-        self.output_label.grid(row=2, column=1, padx=5, pady=5)
+        self.output_label.grid(row=3, column=1, padx=5, pady=5)
         tk.Button(root, text="Select", command=self.select_output).grid(
-            row=2, column=2, padx=5, pady=5
+            row=3, column=2, padx=5, pady=5
         )
 
-        tk.Button(root, text="Extract", command=self.extract_pages).grid(
-            row=3, column=1, pady=10
+        tk.Button(root, text="Extract", command=self.extract_pages, bg="green", fg="white").grid(
+            row=4, column=1, pady=10, sticky="e"
+        )
+        # Add Preview button next to Extract
+        tk.Button(root, text="Preview", command=self.preview_pages, bg="lightblue", fg="black").grid(
+            row=4, column=2, pady=10, sticky="w"
         )
 
         self.status_label = tk.Label(root, text="")
@@ -51,7 +57,10 @@ class PDFExtractor:
         self.input_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
         if self.input_path:
             # Show only the file name, not the full path
-            self.input_label.config(text=os.path.basename(self.input_path))
+            filename = os.path.basename(self.input_path)
+            if len(filename) > 20:
+                filename = filename[:17] + "..."
+            self.input_label.config(text=filename)
             # Show valid page range
             try:
                 with open(self.input_path, "rb") as f:
@@ -59,7 +68,7 @@ class PDFExtractor:
                     total_pages = len(reader.pages)
                 self.page_range_label.config(text=f"Pages: 1 - {total_pages}")
             except Exception as e:
-                self.page_range_label.config(text="Error reading PDF")
+                self.page_range_label.config(text=f"Error reading PDF: {str(e)}")
         else:
             self.input_label.config(text="No file selected")
             self.page_range_label.config(text="")
@@ -71,7 +80,11 @@ class PDFExtractor:
         )
         if self.output_path:
             # Show only the file name, not the full path
-            self.output_label.config(text=os.path.basename(self.output_path))
+            # Show only the file name, truncated to 20 characters if necessary
+            filename = os.path.basename(self.output_path)
+            if len(filename) > 20:
+                filename = filename[:17] + "..."
+            self.output_label.config(text=filename)
         else:
             self.output_label.config(text="No file selected")
 
@@ -103,6 +116,52 @@ class PDFExtractor:
                 with open(self.output_path, "wb") as out_f:
                     writer.write(out_f)
             self.status_label.config(text="Done!", fg="green")
+        except Exception as e:
+            self.status_label.config(text=f"Error: {str(e)}", fg="red")
+
+    def preview_pages(self):
+        """Show a preview of the actual PDF pages as images based on the selection."""
+        if not self.input_path:
+            self.status_label.config(text="Please select input PDF")
+            return
+        selection_str = self.page_selection.get()
+        if not selection_str:
+            self.status_label.config(text="Please enter page selection")
+            return
+        try:
+            with open(self.input_path, "rb") as f:
+                reader = PyPDF2.PdfReader(f)
+                total_pages = len(reader.pages)
+                pages_to_extract = self.parse_page_selection(selection_str, total_pages)
+            # pdf2image uses 1-based page numbers
+            page_numbers = [p + 1 for p in pages_to_extract]
+            images = convert_from_path(self.input_path, first_page=min(page_numbers), last_page=max(page_numbers), fmt='ppm')
+            # Map page_numbers to images (pdf2image returns all pages in the range)
+            page_to_img = {num: img for num, img in zip(range(min(page_numbers), max(page_numbers)+1), images)}
+            preview_win = tk.Toplevel(self.root)
+            preview_win.title("Preview PDF Pages")
+            canvas = tk.Canvas(preview_win, width=600, height=800)
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar = tk.Scrollbar(preview_win, orient="vertical", command=canvas.yview)
+            scrollbar.pack(side="right", fill="y")
+            canvas.configure(yscrollcommand=scrollbar.set)
+            frame = tk.Frame(canvas)
+            canvas.create_window((0, 0), window=frame, anchor="nw")
+            self._preview_imgs = []  # Prevent garbage collection
+            for p in page_numbers:
+                img = page_to_img.get(p)
+                if img is not None:
+                    img = img.resize((500, int(img.height * 500 / img.width)), Image.LANCZOS)
+                    tk_img = ImageTk.PhotoImage(img)
+                    self._preview_imgs.append(tk_img)
+                    label = tk.Label(frame, text=f"Page {p}", font=("Arial", 14, "bold"))
+                    label.pack(pady=(20, 5))
+                    img_label = tk.Label(frame, image=tk_img)
+                    img_label.pack(pady=(0, 10))
+            def on_configure(event):
+                canvas.configure(scrollregion=canvas.bbox("all"))
+            frame.bind("<Configure>", on_configure)
+            tk.Button(preview_win, text="OK", command=preview_win.destroy).pack(pady=10)
         except Exception as e:
             self.status_label.config(text=f"Error: {str(e)}", fg="red")
 
